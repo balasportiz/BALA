@@ -1,0 +1,5 @@
+{
+  "name": "Excel V-Lookup Assistant",
+  "description": "An intuitive web application to perform V-lookup operations between two Excel files directly in your browser. Upload your files, select your columns, and get the merged data instantly.",
+  "requestFramePermissions": []
+}
