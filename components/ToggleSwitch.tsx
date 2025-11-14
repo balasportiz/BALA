@@ -3,7 +3,7 @@ import React from 'react';
 
 interface ToggleSwitchProps {
     id: string;
-    label?: string;
+    label: string;
     checked: boolean;
     onChange: (checked: boolean) => void;
 }
@@ -12,7 +12,7 @@ const ToggleSwitch: React.FC<ToggleSwitchProps> = ({ id, label, checked, onChang
     return (
         <div className="flex items-center justify-start">
             <label htmlFor={id} className="flex items-center cursor-pointer">
-                {label && <span className="mr-3 text-sm font-medium text-gray-700">{label}</span>}
+                <span className="mr-3 text-sm font-medium text-gray-700">{label}</span>
                 <div className="relative">
                     <input 
                         id={id} 

@@ -1,12 +1,13 @@
-
 import React, { useState, useMemo, useCallback } from 'react';
 import type { ExcelData, ColumnSelectionA, ColumnSelectionB } from './types';
 import { parseExcelFile, exportToExcel } from './services/excelService';
 import FileUploader from './components/FileUploader';
 import ColumnSelector from './components/ColumnSelector';
 import ResultsTable from './components/ResultsTable';
-import ToggleSwitch from './components/ToggleSwitch';
+import Slider from './components/Slider';
 import { DownloadIcon, MergeIcon, AlertIcon } from './components/Icons';
+
+type MatchMode = 'exact' | 'normalized' | 'fuzzy';
 
 const App: React.FC = () => {
     const [fileA, setFileA] = useState<ExcelData | null>(null);
@@ -19,12 +20,9 @@ const App: React.FC = () => {
     const [mergedData, setMergedData] = useState<string[][] | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [isCaseSensitive, setIsCaseSensitive] = useState<boolean>(false);
+    const [matchMode, setMatchMode] = useState<MatchMode>('normalized');
+    const [matchTolerance, setMatchTolerance] = useState<number>(1);
     const [uploadProgress, setUploadProgress] = useState<{ [id: string]: number }>({});
-    
-    // Validation State
-    const [validateDuplicates, setValidateDuplicates] = useState<boolean>(false);
-    const [validateReturnType, setValidateReturnType] = useState<'any' | 'number'>('any');
 
     const handleDataSourceCountChange = (count: number) => {
         const newCount = Math.max(1, Math.min(10, count)); // Cap at 10 for sanity
@@ -115,7 +113,6 @@ const App: React.FC = () => {
     };
 
     const handleMerge = useCallback(() => {
-        // Basic configuration checks
         if (!fileA || !selectionA.sheet || selectionA.column === null) {
             setError('Please select File A and configure its columns.');
             return;
@@ -132,6 +129,43 @@ const App: React.FC = () => {
         setIsLoading(true);
         setError(null);
 
+        const levenshteinDistance = (a: string, b: string): number => {
+            if (a.length === 0) return b.length;
+            if (b.length === 0) return a.length;
+            const matrix = Array(b.length + 1).fill(null).map(() => Array(a.length + 1).fill(null));
+            for (let i = 0; i <= a.length; i++) { matrix[0][i] = i; }
+            for (let j = 0; j <= b.length; j++) { matrix[j][0] = j; }
+            for (let j = 1; j <= b.length; j++) {
+                for (let i = 1; i <= a.length; i++) {
+                    const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                    matrix[j][i] = Math.min(
+                        matrix[j][i - 1] + 1,        // deletion
+                        matrix[j - 1][i] + 1,        // insertion
+                        matrix[j - 1][i - 1] + cost, // substitution
+                    );
+                }
+            }
+            return matrix[b.length][a.length];
+        };
+        
+        const getComparisonKey = (value: string, mode: 'exact' | 'normalized'): string => {
+            let key = value; // The value is already a trimmed string from excelService.
+            if (mode === 'exact') {
+                return key.replace(/\s+/g, ' ');
+            }
+
+            // 'normalized' mode is used for both Normalized and Fuzzy matching
+            if (/^-?\d*\.?\d+$/.test(key)) {
+                key = String(parseFloat(key));
+            }
+
+            return key
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]/gi, '');
+        };
+
         setTimeout(() => {
             try {
                 const sheetAData = fileA.sheets[selectionA.sheet!];
@@ -142,65 +176,38 @@ const App: React.FC = () => {
                 if (selectionA.column! >= headerLengthA) {
                     throw new Error(`Invalid lookup column selection for File A (${fileA.fileName}). The sheet only has ${headerLengthA} columns.`);
                 }
-                
+
                 const headerA = sheetAData[0];
                 const dataA = sheetAData.slice(1);
-                
-                // --- DATA VALIDATION ---
-                if (validateDuplicates) {
-                    const lookupColumnIndex = selectionA.column!;
-                    const seenValues = new Set<string>();
-                    const duplicates = new Set<string>();
-                    for (const row of dataA) {
-                        const value = isCaseSensitive ? row[lookupColumnIndex] : row[lookupColumnIndex].toLowerCase();
-                        if(value) { // Only check non-empty values
-                           if (seenValues.has(value)) {
-                                duplicates.add(`"${value}"`);
-                            } else {
-                                seenValues.add(value);
-                            } 
-                        }
-                    }
-                    if (duplicates.size > 0) {
-                        throw new Error(`Validation Error in File A: Duplicate lookup values found: ${Array.from(duplicates).slice(0, 5).join(', ')}...`);
-                    }
-                }
 
+                const mapNormalizationMode = matchMode === 'exact' ? 'exact' : 'normalized';
                 const lookupMaps = dataSources.map((dataSource, index) => {
-                    if (!dataSource) return new Map<string, string>(); // Should not happen
+                    if (!dataSource) return new Map<string, string>(); // Should not happen due to initial checks
                     const selection = dataSourceSelections[index];
                     const sheetData = dataSource.sheets[selection.sheet!];
                     const fileId = `Data Source ${String.fromCharCode(66 + index)} (${dataSource.fileName})`;
 
-                    if (!sheetData || sheetData.length === 0) throw new Error(`Sheet "${selection.sheet}" in ${fileId} is empty.`);
-                    const headerLength = sheetData[0]?.length ?? 0;
-                    if (selection.lookupColumn! >= headerLength) throw new Error(`Invalid lookup column in ${fileId}. The sheet only has ${headerLength} columns.`);
-                    if (selection.returnColumn! >= headerLength) throw new Error(`Invalid return column in ${fileId}. The sheet only has ${headerLength} columns.`);
-                    
-                    const dataB = sheetData.slice(1);
+                    if (!sheetData || sheetData.length === 0) {
+                        throw new Error(`Sheet "${selection.sheet}" in ${fileId} is empty.`);
+                    }
 
-                    // --- RETURN TYPE VALIDATION ---
-                    if (validateReturnType === 'number') {
-                        const returnColIndex = selection.returnColumn!;
-                        for (let i = 0; i < dataB.length; i++) {
-                            const value = dataB[i][returnColIndex];
-                            if (value && value.trim() !== '') {
-                                const numericValue = String(value).replace(/,/g, '');
-                                const isNumber = !isNaN(parseFloat(numericValue)) && isFinite(Number(numericValue));
-                                if (!isNumber) {
-                                    throw new Error(`Validation Error in ${dataSource.fileName} (Sheet: ${selection.sheet!}, Row: ${i + 2}): Expected a number, but found "${value}".`);
-                                }
-                            }
-                        }
+                    const headerLength = sheetData[0]?.length ?? 0;
+                    if (selection.lookupColumn! >= headerLength) {
+                        throw new Error(`Invalid lookup column in ${fileId}. The sheet only has ${headerLength} columns.`);
+                    }
+                    if (selection.returnColumn! >= headerLength) {
+                        throw new Error(`Invalid return column in ${fileId}. The sheet only has ${headerLength} columns.`);
                     }
                     
                     const lookupMap = new Map<string, string>();
-                    for (const row of dataB) {
+                    for (const row of sheetData.slice(1)) {
                         const key = row[selection.lookupColumn!];
                         const value = row[selection.returnColumn!];
                         if (key) {
-                            const finalKey = isCaseSensitive ? key : key.toLowerCase();
-                            lookupMap.set(finalKey, value);
+                           const finalKey = getComparisonKey(key, mapNormalizationMode);
+                           if (!lookupMap.has(finalKey)) {
+                               lookupMap.set(finalKey, value);
+                           }
                         }
                     }
                     return lookupMap;
@@ -217,10 +224,31 @@ const App: React.FC = () => {
 
                 const resultData = dataA.map(row => {
                     const lookupValue = row[selectionA.column!];
-                    const finalLookupValue = lookupValue ? (isCaseSensitive ? lookupValue : lookupValue.toLowerCase()) : '';
                     const newRow = [...row];
+                    
                     lookupMaps.forEach(lookupMap => {
-                        const matchedValue = lookupMap.get(finalLookupValue) ?? 'N/A';
+                        let matchedValue = 'N/A';
+                        if (matchMode === 'fuzzy') {
+                            const normalizedLookup = getComparisonKey(lookupValue, 'normalized');
+                            if (normalizedLookup) {
+                                let minDistance = Infinity;
+                                let bestMatchKey: string | null = null;
+                                for (const key of lookupMap.keys()) {
+                                    const distance = levenshteinDistance(normalizedLookup, key);
+                                    if (distance < minDistance) {
+                                        minDistance = distance;
+                                        bestMatchKey = key;
+                                    }
+                                    if (minDistance === 0) break; // Perfect match found
+                                }
+                                if (bestMatchKey !== null && minDistance <= matchTolerance) {
+                                    matchedValue = lookupMap.get(bestMatchKey) ?? 'N/A';
+                                }
+                            }
+                        } else {
+                            const finalLookupValue = getComparisonKey(lookupValue, matchMode);
+                            matchedValue = lookupMap.get(finalLookupValue) ?? 'N/A';
+                        }
                         newRow.push(matchedValue);
                     });
                     return newRow;
@@ -235,7 +263,7 @@ const App: React.FC = () => {
                 setIsLoading(false);
             }
         }, 50);
-    }, [fileA, dataSources, selectionA, dataSourceSelections, isCaseSensitive, validateDuplicates, validateReturnType]);
+    }, [fileA, dataSources, selectionA, dataSourceSelections, matchMode, matchTolerance]);
 
     const handleDownload = () => {
         if (!mergedData) {
@@ -255,8 +283,6 @@ const App: React.FC = () => {
     const isDownloadDisabled = useMemo(() => {
         return isLoading || !mergedData;
     }, [isLoading, mergedData]);
-    
-    const showConfig = fileA && dataSources.some(ds => ds !== null);
 
     return (
         <div className="min-h-screen bg-gray-50 text-gray-800 p-4 sm:p-6 lg:p-8">
@@ -303,16 +329,36 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 
-                {showConfig && (
+                {fileA && dataSources.some(ds => ds !== null) && (
                     <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-                        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4">
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4 gap-4">
                             <h2 className="text-2xl font-semibold text-gray-800 mb-2 sm:mb-0">Step 3: Configure Columns</h2>
-                             <ToggleSwitch
-                                id="case-sensitive-toggle"
-                                label="Case-Sensitive Matching"
-                                checked={isCaseSensitive}
-                                onChange={setIsCaseSensitive}
-                            />
+                             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <label htmlFor="match-mode" className="text-sm font-medium text-gray-700 whitespace-nowrap">Matching Logic:</label>
+                                    <select
+                                        id="match-mode"
+                                        value={matchMode}
+                                        onChange={(e) => setMatchMode(e.target.value as MatchMode)}
+                                        className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    >
+                                        <option value="normalized">Normalized (Case-Insensitive)</option>
+                                        <option value="fuzzy">Fuzzy (Approximate)</option>
+                                        <option value="exact">Exact (Case-Sensitive)</option>
+                                    </select>
+                                </div>
+                                {matchMode === 'fuzzy' && (
+                                    <Slider
+                                        id="fuzzy-tolerance"
+                                        label="Match Tolerance"
+                                        min={0}
+                                        max={5}
+                                        step={1}
+                                        value={matchTolerance}
+                                        onChange={setMatchTolerance}
+                                    />
+                                )}
+                             </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {fileA && (
@@ -336,35 +382,6 @@ const App: React.FC = () => {
                                     />
                                 )
                             )}
-                        </div>
-                    </div>
-                )}
-                
-                {showConfig && (
-                    <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-                        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Step 4: Validation Options <span className="text-base font-normal text-gray-500">(Optional)</span></h2>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                                <span className="text-sm font-medium text-gray-700">Check for duplicate lookup values in File A</span>
-                                <ToggleSwitch
-                                    id="validate-duplicates-toggle"
-                                    label=""
-                                    checked={validateDuplicates}
-                                    onChange={setValidateDuplicates}
-                                />
-                            </div>
-                            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                                <label htmlFor="return-type-validation" className="text-sm font-medium text-gray-700">Ensure return values are</label>
-                                <select
-                                    id="return-type-validation"
-                                    value={validateReturnType}
-                                    onChange={(e) => setValidateReturnType(e.target.value as 'any' | 'number')}
-                                    className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                                >
-                                    <option value="any">Any Type</option>
-                                    <option value="number">Numeric</option>
-                                </select>
-                            </div>
                         </div>
                     </div>
                 )}
