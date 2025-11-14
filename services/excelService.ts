@@ -3,9 +3,20 @@ import type { ExcelData, ExcelSheetData } from '../types';
 
 declare const XLSX: any;
 
-export const parseExcelFile = (file: File): Promise<ExcelData> => {
+export const parseExcelFile = (
+    file: File,
+    onProgress: (progress: number) => void
+): Promise<ExcelData> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
+
+        reader.onprogress = (event: ProgressEvent<FileReader>) => {
+            if (event.lengthComputable) {
+                const progress = Math.round((event.loaded / event.total) * 100);
+                onProgress(progress);
+            }
+        };
+
         reader.onload = (event: ProgressEvent<FileReader>) => {
             if (!event.target?.result) {
                 return reject(new Error("FileReader event target result is null."));
@@ -19,8 +30,15 @@ export const parseExcelFile = (file: File): Promise<ExcelData> => {
                     const worksheet = workbook.Sheets[name];
                     // Using header: 1 to get an array of arrays, which is easier to work with indices
                     const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-                    sheets[name] = json as string[][];
+                    // Convert all cell data to trimmed strings to ensure robust matching.
+                    // Case sensitivity will be handled in the merge logic.
+                    sheets[name] = (json as any[][]).map(row => 
+                        row.map(cell => String(cell ?? '').trim())
+                    );
                 });
+                
+                // Ensure progress completes and call resolves
+                onProgress(100);
                 resolve({ fileName: file.name, sheetNames, sheets });
             } catch (error) {
                 reject(error);

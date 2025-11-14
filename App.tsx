@@ -5,6 +5,7 @@ import { parseExcelFile, exportToExcel } from './services/excelService';
 import FileUploader from './components/FileUploader';
 import ColumnSelector from './components/ColumnSelector';
 import ResultsTable from './components/ResultsTable';
+import ToggleSwitch from './components/ToggleSwitch';
 import { DownloadIcon, MergeIcon, AlertIcon } from './components/Icons';
 
 const App: React.FC = () => {
@@ -18,6 +19,12 @@ const App: React.FC = () => {
     const [mergedData, setMergedData] = useState<string[][] | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isCaseSensitive, setIsCaseSensitive] = useState<boolean>(false);
+    const [uploadProgress, setUploadProgress] = useState<{ [id: string]: number }>({});
+    
+    // Validation State
+    const [validateDuplicates, setValidateDuplicates] = useState<boolean>(false);
+    const [validateReturnType, setValidateReturnType] = useState<'any' | 'number'>('any');
 
     const handleDataSourceCountChange = (count: number) => {
         const newCount = Math.max(1, Math.min(10, count)); // Cap at 10 for sanity
@@ -47,11 +54,29 @@ const App: React.FC = () => {
     };
 
     const handleFile = useCallback(async (file: File, type: 'A' | 'B', index: number = 0) => {
+        const uploaderId = type === 'A' ? 'file-a' : `file-b-${index}`;
+
         setIsLoading(true);
         setError(null);
         setMergedData(null);
+
+        const progressCallback = (progress: number) => {
+            setUploadProgress(prev => ({ ...prev, [uploaderId]: progress }));
+        };
+        
+        // Reset specific file state before parsing a new one
+        if (type === 'A') {
+            setFileA(null);
+        } else {
+             setDataSources(current => {
+                const newArr = [...current];
+                newArr[index] = null;
+                return newArr;
+            });
+        }
+
         try {
-            const data = await parseExcelFile(file);
+            const data = await parseExcelFile(file, progressCallback);
             if (type === 'A') {
                 setFileA(data);
                 setSelectionA({ sheet: '', column: null });
@@ -72,6 +97,12 @@ const App: React.FC = () => {
             console.error(err);
         } finally {
             setIsLoading(false);
+            // Clear progress for this uploader
+            setUploadProgress(prev => {
+                const newState = { ...prev };
+                delete newState[uploaderId];
+                return newState;
+            });
         }
     }, []);
 
@@ -84,6 +115,7 @@ const App: React.FC = () => {
     };
 
     const handleMerge = useCallback(() => {
+        // Basic configuration checks
         if (!fileA || !selectionA.sheet || selectionA.column === null) {
             setError('Please select File A and configure its columns.');
             return;
@@ -103,19 +135,72 @@ const App: React.FC = () => {
         setTimeout(() => {
             try {
                 const sheetAData = fileA.sheets[selectionA.sheet!];
+                if (!sheetAData || sheetAData.length === 0) {
+                    throw new Error(`Sheet "${selectionA.sheet}" in File A (${fileA.fileName}) is empty.`);
+                }
+                const headerLengthA = sheetAData[0]?.length ?? 0;
+                if (selectionA.column! >= headerLengthA) {
+                    throw new Error(`Invalid lookup column selection for File A (${fileA.fileName}). The sheet only has ${headerLengthA} columns.`);
+                }
+                
                 const headerA = sheetAData[0];
                 const dataA = sheetAData.slice(1);
+                
+                // --- DATA VALIDATION ---
+                if (validateDuplicates) {
+                    const lookupColumnIndex = selectionA.column!;
+                    const seenValues = new Set<string>();
+                    const duplicates = new Set<string>();
+                    for (const row of dataA) {
+                        const value = isCaseSensitive ? row[lookupColumnIndex] : row[lookupColumnIndex].toLowerCase();
+                        if(value) { // Only check non-empty values
+                           if (seenValues.has(value)) {
+                                duplicates.add(`"${value}"`);
+                            } else {
+                                seenValues.add(value);
+                            } 
+                        }
+                    }
+                    if (duplicates.size > 0) {
+                        throw new Error(`Validation Error in File A: Duplicate lookup values found: ${Array.from(duplicates).slice(0, 5).join(', ')}...`);
+                    }
+                }
 
                 const lookupMaps = dataSources.map((dataSource, index) => {
-                    if (!dataSource) return new Map<string, string>();
+                    if (!dataSource) return new Map<string, string>(); // Should not happen
                     const selection = dataSourceSelections[index];
                     const sheetData = dataSource.sheets[selection.sheet!];
+                    const fileId = `Data Source ${String.fromCharCode(66 + index)} (${dataSource.fileName})`;
+
+                    if (!sheetData || sheetData.length === 0) throw new Error(`Sheet "${selection.sheet}" in ${fileId} is empty.`);
+                    const headerLength = sheetData[0]?.length ?? 0;
+                    if (selection.lookupColumn! >= headerLength) throw new Error(`Invalid lookup column in ${fileId}. The sheet only has ${headerLength} columns.`);
+                    if (selection.returnColumn! >= headerLength) throw new Error(`Invalid return column in ${fileId}. The sheet only has ${headerLength} columns.`);
+                    
+                    const dataB = sheetData.slice(1);
+
+                    // --- RETURN TYPE VALIDATION ---
+                    if (validateReturnType === 'number') {
+                        const returnColIndex = selection.returnColumn!;
+                        for (let i = 0; i < dataB.length; i++) {
+                            const value = dataB[i][returnColIndex];
+                            if (value && value.trim() !== '') {
+                                const numericValue = String(value).replace(/,/g, '');
+                                const isNumber = !isNaN(parseFloat(numericValue)) && isFinite(Number(numericValue));
+                                if (!isNumber) {
+                                    throw new Error(`Validation Error in ${dataSource.fileName} (Sheet: ${selection.sheet!}, Row: ${i + 2}): Expected a number, but found "${value}".`);
+                                }
+                            }
+                        }
+                    }
+                    
                     const lookupMap = new Map<string, string>();
-                    for (const row of sheetData.slice(1)) {
+                    for (const row of dataB) {
                         const key = row[selection.lookupColumn!];
                         const value = row[selection.returnColumn!];
-                        if (key !== undefined && key !== null) {
-                            lookupMap.set(String(key), value);
+                        if (key) {
+                            const finalKey = isCaseSensitive ? key : key.toLowerCase();
+                            lookupMap.set(finalKey, value);
                         }
                     }
                     return lookupMap;
@@ -132,9 +217,10 @@ const App: React.FC = () => {
 
                 const resultData = dataA.map(row => {
                     const lookupValue = row[selectionA.column!];
+                    const finalLookupValue = lookupValue ? (isCaseSensitive ? lookupValue : lookupValue.toLowerCase()) : '';
                     const newRow = [...row];
                     lookupMaps.forEach(lookupMap => {
-                        const matchedValue = lookupMap.get(String(lookupValue)) ?? 'N/A';
+                        const matchedValue = lookupMap.get(finalLookupValue) ?? 'N/A';
                         newRow.push(matchedValue);
                     });
                     return newRow;
@@ -142,13 +228,14 @@ const App: React.FC = () => {
 
                 setMergedData([newHeaders, ...resultData]);
             } catch (err) {
-                setError('An error occurred during the merge process. Please check your column selections.');
+                const errorMessage = err instanceof Error ? err.message : 'An error occurred during the merge process. Please check your column selections and file contents.';
+                setError(errorMessage);
                 console.error(err);
             } finally {
                 setIsLoading(false);
             }
         }, 50);
-    }, [fileA, dataSources, selectionA, dataSourceSelections]);
+    }, [fileA, dataSources, selectionA, dataSourceSelections, isCaseSensitive, validateDuplicates, validateReturnType]);
 
     const handleDownload = () => {
         if (!mergedData) {
@@ -168,6 +255,8 @@ const App: React.FC = () => {
     const isDownloadDisabled = useMemo(() => {
         return isLoading || !mergedData;
     }, [isLoading, mergedData]);
+    
+    const showConfig = fileA && dataSources.some(ds => ds !== null);
 
     return (
         <div className="min-h-screen bg-gray-50 text-gray-800 p-4 sm:p-6 lg:p-8">
@@ -178,7 +267,12 @@ const App: React.FC = () => {
                 </header>
                 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                    <FileUploader id="file-a" title="Step 1: Upload Lookup File (File A)" onFileSelect={(file) => handleFile(file, 'A')} />
+                    <FileUploader 
+                        id="file-a" 
+                        title="Step 1: Upload Lookup File (File A)" 
+                        onFileSelect={(file) => handleFile(file, 'A')} 
+                        progress={uploadProgress['file-a']}
+                    />
                     <div className="space-y-4">
                         <div className="bg-white p-6 rounded-lg shadow-md w-full">
                             <div className="flex items-center justify-between mb-4">
@@ -201,6 +295,7 @@ const App: React.FC = () => {
                                         id={`file-b-${index}`} 
                                         title={`Data Source ${String.fromCharCode(66 + index)}`} 
                                         onFileSelect={(file) => handleFile(file, 'B', index)} 
+                                        progress={uploadProgress[`file-b-${index}`]}
                                     />
                                 </div>
                             ))}
@@ -208,9 +303,17 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 
-                {fileA && dataSources.some(ds => ds !== null) && (
+                {showConfig && (
                     <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-                        <h2 className="text-2xl font-semibold mb-4 text-gray-800">Step 3: Configure Columns</h2>
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center mb-4">
+                            <h2 className="text-2xl font-semibold text-gray-800 mb-2 sm:mb-0">Step 3: Configure Columns</h2>
+                             <ToggleSwitch
+                                id="case-sensitive-toggle"
+                                label="Case-Sensitive Matching"
+                                checked={isCaseSensitive}
+                                onChange={setIsCaseSensitive}
+                            />
+                        </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {fileA && (
                                 <ColumnSelector 
@@ -233,6 +336,35 @@ const App: React.FC = () => {
                                     />
                                 )
                             )}
+                        </div>
+                    </div>
+                )}
+                
+                {showConfig && (
+                    <div className="bg-white p-6 rounded-lg shadow-md mb-8">
+                        <h2 className="text-2xl font-semibold text-gray-800 mb-4">Step 4: Validation Options <span className="text-base font-normal text-gray-500">(Optional)</span></h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                                <span className="text-sm font-medium text-gray-700">Check for duplicate lookup values in File A</span>
+                                <ToggleSwitch
+                                    id="validate-duplicates-toggle"
+                                    label=""
+                                    checked={validateDuplicates}
+                                    onChange={setValidateDuplicates}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                                <label htmlFor="return-type-validation" className="text-sm font-medium text-gray-700">Ensure return values are</label>
+                                <select
+                                    id="return-type-validation"
+                                    value={validateReturnType}
+                                    onChange={(e) => setValidateReturnType(e.target.value as 'any' | 'number')}
+                                    className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                >
+                                    <option value="any">Any Type</option>
+                                    <option value="number">Numeric</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 )}
@@ -266,7 +398,7 @@ const App: React.FC = () => {
                     </button>
                 </div>
                 
-                {isLoading && !mergedData && (
+                {isLoading && !mergedData && Object.keys(uploadProgress).length === 0 && (
                     <div className="flex justify-center items-center p-8">
                         <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500"></div>
                     </div>
