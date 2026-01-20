@@ -38,7 +38,7 @@ const StepIndicator: React.FC<StepIndicatorProps> = ({ currentStep }) => {
     const progress = Math.max(0, (currentStep - 1.5) / (steps.length - 2)) * 100;
 
     return (
-        <div className="w-full mb-10 sm:mb-16">
+        <div className="w-full">
             <div className="relative max-w-xs sm:max-w-sm mx-auto">
                 <div className="absolute top-5 left-0 w-full h-1 bg-slate-200 rounded-full">
                     <div className="h-1 bg-gradient-to-r from-sky-400 to-teal-400 rounded-full transition-all duration-500" style={{width: `${progress}%`}}></div>

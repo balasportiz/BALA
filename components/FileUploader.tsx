@@ -131,14 +131,14 @@ const FileUploader: React.FC<FileUploaderProps> = ({ id, title, subtitle, onFile
     }
 
     return (
-        <div className="bg-white/60 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg p-6 w-full">
+        <div className="bg-white/60 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 p-6 w-full">
             <div className="text-center">
                 <h3 className="text-xl font-bold text-slate-800">{title}</h3>
                 {subtitle && <p className="text-sm text-slate-500 mb-4">{subtitle}</p>}
             </div>
             <label
                 htmlFor={id}
-                className={`mt-4 flex flex-col items-center justify-center w-full h-52 border-2 border-dashed rounded-xl cursor-pointer transition-colors
+                className={`mt-4 flex flex-col items-center justify-center w-full h-48 sm:h-52 border-2 border-dashed rounded-xl cursor-pointer transition-colors
                     ${isDragging ? 'border-sky-500 bg-sky-50' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'}`}
                 onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}
             >

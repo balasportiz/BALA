@@ -7,9 +7,10 @@ interface ColumnSelectorProps {
     setSelection: (selection: ColumnSelectionA | ColumnSelectionB) => void;
     type: 'A' | 'B';
     fileIdentifier?: string;
+    customLabel?: string;
 }
 
-const ColumnSelector: React.FC<ColumnSelectorProps> = ({ fileData, selection, setSelection, type, fileIdentifier }) => {
+const ColumnSelector: React.FC<ColumnSelectorProps> = ({ fileData, selection, setSelection, type, fileIdentifier, customLabel }) => {
     
     const headers = fileData.sheets[selection.sheet] ? fileData.sheets[selection.sheet][0] : [];
 
@@ -55,7 +56,9 @@ const ColumnSelector: React.FC<ColumnSelectorProps> = ({ fileData, selection, se
             
             {selection.sheet && type === 'A' && selectionA && (
                 <div>
-                    <label htmlFor={`lookup-column-a-${uniqueId}`} className="block text-sm font-medium text-slate-600 mb-1">Lookup Column</label>
+                    <label htmlFor={`lookup-column-a-${uniqueId}`} className="block text-sm font-medium text-slate-600 mb-1">
+                        {customLabel || "Lookup Column"}
+                    </label>
                     <select 
                         id={`lookup-column-a-${uniqueId}`}
                         value={selectionA.column ?? ''}
