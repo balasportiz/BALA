@@ -60,3 +60,17 @@ export const exportToExcel = (data: string[][], fileName: string): void => {
         alert("An error occurred while creating the Excel file.");
     }
 };
+
+export const exportMultipleSheetsToExcel = (sheets: { name: string, data: string[][] }[], fileName: string): void => {
+    try {
+        const workbook = XLSX.utils.book_new();
+        sheets.forEach(sheet => {
+            const worksheet = XLSX.utils.aoa_to_sheet(sheet.data);
+            XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
+        });
+        XLSX.writeFile(workbook, fileName);
+    } catch (error) {
+        console.error("Failed to export to Excel:", error);
+        alert("An error occurred while creating the Excel file.");
+    }
+};

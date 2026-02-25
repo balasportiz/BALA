@@ -3,9 +3,10 @@ import React from 'react';
 
 interface ResultsTableProps {
     data: string[][];
+    highlightIndices?: Set<number>;
 }
 
-const ResultsTable: React.FC<ResultsTableProps> = ({ data }) => {
+const ResultsTable: React.FC<ResultsTableProps> = ({ data, highlightIndices }) => {
     if (!data || data.length === 0) {
         return <p className="text-center text-slate-500">No data to display.</p>;
     }
@@ -19,7 +20,10 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ data }) => {
         return lower.includes('fixed_date') || 
                lower.includes('calculated_age') || 
                lower.includes('matched_') || 
-               lower.includes('cleaned_');
+               lower.includes('cleaned_') ||
+               lower.includes('is_duplicate') ||
+               lower.includes('original_row') ||
+               lower.includes('group_id');
     };
 
     return (
@@ -46,23 +50,26 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ data }) => {
                         </tr>
                     </thead>
                     <tbody>
-                        {rows.map((row, rowIndex) => (
-                            <tr key={rowIndex} className="hover:bg-sky-50/50 transition-colors duration-150 group">
-                                {row.map((cell, cellIndex) => {
-                                    const magic = isMagicColumn(header[cellIndex]);
-                                    return (
-                                        <td 
-                                            key={cellIndex} 
-                                            className={`px-6 py-4 whitespace-nowrap border-t border-slate-200/60 ${
-                                                magic ? 'bg-indigo-50/30 font-semibold text-indigo-900 group-hover:bg-indigo-100/50' : ''
-                                            }`}
-                                        >
-                                            {cell}
-                                        </td>
-                                    );
-                                })}
-                            </tr>
-                        ))}
+                        {rows.map((row, rowIndex) => {
+                            const isHighlighted = highlightIndices?.has(rowIndex);
+                            return (
+                                <tr key={rowIndex} className={`transition-colors duration-150 group ${isHighlighted ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-sky-50/50'}`}>
+                                    {row.map((cell, cellIndex) => {
+                                        const magic = isMagicColumn(header[cellIndex]);
+                                        return (
+                                            <td 
+                                                key={cellIndex} 
+                                                className={`px-6 py-4 whitespace-nowrap border-t border-slate-200/60 ${
+                                                    magic ? 'bg-indigo-50/30 font-semibold text-indigo-900 group-hover:bg-indigo-100/50' : ''
+                                                } ${isHighlighted ? 'text-red-900' : ''}`}
+                                            >
+                                                {cell}
+                                            </td>
+                                        );
+                                    })}
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
             </div>
