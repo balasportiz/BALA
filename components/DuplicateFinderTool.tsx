@@ -56,7 +56,8 @@ const DuplicateFinderTool: React.FC = () => {
             setSelectedSheet('');
             setSelectedColumns([]);
         } catch (err) {
-            setError('Failed to parse the Excel file. Please ensure it is a valid .xlsx or .xls file.');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to parse the Excel file. Please ensure it is a valid .xlsx or .xls file.';
+            setError(errorMessage);
             console.error(err);
         } finally {
             setIsLoading(false);
@@ -233,6 +234,10 @@ const DuplicateFinderTool: React.FC = () => {
                     unique: uniqueRows.length,
                     removed: duplicateRows.length
                 });
+
+                if (duplicateRows.length === 0) {
+                    setError('No duplicates found in the selected columns.');
+                }
 
                 // Default to showing grouped review if duplicates exist
                 if (duplicateRows.length > 0) {

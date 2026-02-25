@@ -25,6 +25,7 @@ const VLookupTool: React.FC = () => {
     const [dataSourceSelections, setDataSourceSelections] = useState<ColumnSelectionB[]>([{ sheet: '', lookupColumn: null, returnColumns: [] }]);
     
     const [mergedData, setMergedData] = useState<string[][] | null>(null);
+    const [stats, setStats] = useState<{ total: number; matched: number; unmatched: number } | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [matchMode, setMatchMode] = useState<MatchMode>('normalized');
@@ -54,6 +55,7 @@ const VLookupTool: React.FC = () => {
             return newArr;
         });
         setMergedData(null); // Reset results
+        setStats(null);
     };
 
     const handleFile = useCallback(async (file: File, type: 'A' | 'B', index: number = 0) => {
@@ -61,6 +63,7 @@ const VLookupTool: React.FC = () => {
         setIsLoading(true);
         setError(null);
         setMergedData(null);
+        setStats(null);
 
         const progressCallback = (progress: number) => {
             setUploadProgress(prev => ({ ...prev, [uploaderId]: progress }));
@@ -94,7 +97,8 @@ const VLookupTool: React.FC = () => {
                 });
             }
         } catch (err) {
-            setError('Failed to parse the Excel file. Please ensure it is a valid .xlsx or .xls file.');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to parse the Excel file. Please ensure it is a valid .xlsx or .xls file.';
+            setError(errorMessage);
             console.error(err);
         } finally {
             setIsLoading(false);
@@ -203,9 +207,14 @@ const VLookupTool: React.FC = () => {
                     });
                 });
 
+                let matchedCount = 0;
+                let unmatchedCount = 0;
+
                 const resultData = dataA.map(row => {
                     const lookupValue = row[selectionA.column!];
                     const newRow = [...row];
+                    let hasAnyMatch = false;
+
                     lookupMaps.forEach((lookupMap, index) => {
                         const selection = dataSourceSelections[index];
                         let matchedValues = Array(selection.returnColumns.length).fill('N/A');
@@ -224,15 +233,36 @@ const VLookupTool: React.FC = () => {
                                 }
                                 if (bestMatchKey !== null && minDistance <= matchTolerance) {
                                     matchedValues = lookupMap.get(bestMatchKey) ?? Array(selection.returnColumns.length).fill('N/A');
+                                    hasAnyMatch = true;
                                 }
                             } else {
                                 const finalLookupValue = getComparisonKey(lookupValue, matchMode);
-                                matchedValues = lookupMap.get(finalLookupValue) ?? Array(selection.returnColumns.length).fill('N/A');
+                                if (lookupMap.has(finalLookupValue)) {
+                                    matchedValues = lookupMap.get(finalLookupValue)!;
+                                    hasAnyMatch = true;
+                                }
                             }
                         }
                         newRow.push(...matchedValues);
                     });
+
+                    if (hasAnyMatch) {
+                        matchedCount++;
+                    } else {
+                        unmatchedCount++;
+                    }
+
                     return newRow;
+                });
+
+                if (matchedCount === 0) {
+                    setError('No matches were found. Please check your column selections or try a different matching logic (e.g., Normalized or Fuzzy).');
+                }
+
+                setStats({
+                    total: dataA.length,
+                    matched: matchedCount,
+                    unmatched: unmatchedCount
                 });
 
                 setMergedData([newHeaders, ...resultData]);
@@ -385,6 +415,24 @@ const VLookupTool: React.FC = () => {
             <AnimatedSection isVisible={!!mergedData}>
                 <div>
                     <h2 className="text-3xl sm:text-4xl font-extrabold text-center text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-cyan-500 mb-6 pb-1">Voilà! Your Merged Data is Ready.</h2>
+                    
+                    {stats && (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 max-w-4xl mx-auto">
+                            <div className="p-4 rounded-xl shadow-md text-center border-2 bg-white/80 border-slate-100">
+                                <p className="text-sm uppercase font-bold tracking-wider text-slate-500">Total Rows</p>
+                                <p className="text-4xl font-extrabold mt-2 text-slate-800">{stats.total.toLocaleString()}</p>
+                            </div>
+                            <div className="p-4 rounded-xl shadow-md text-center border-2 bg-emerald-50 border-emerald-400 ring-4 ring-emerald-100">
+                                <p className="text-sm uppercase font-bold tracking-wider text-emerald-600">Successfully Matched</p>
+                                <p className="text-4xl font-extrabold text-emerald-600 mt-2">{stats.matched.toLocaleString()}</p>
+                            </div>
+                            <div className="p-4 rounded-xl shadow-md text-center border-2 bg-amber-50 border-amber-400 ring-4 ring-amber-100">
+                                <p className="text-sm uppercase font-bold tracking-wider text-amber-600">Unmatched (N/A)</p>
+                                <p className="text-4xl font-extrabold text-amber-600 mt-2">{stats.unmatched.toLocaleString()}</p>
+                            </div>
+                        </div>
+                    )}
+
                     <ResultsTable data={mergedData!} />
                     <div className="text-center pt-8">
                         <button onClick={handleDownload} disabled={isDownloadDisabled} className="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-4 bg-teal-600 text-white font-bold text-lg rounded-xl shadow-lg hover:bg-teal-700 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-teal-500/50 disabled:bg-slate-400 disabled:cursor-not-allowed transition-all transform hover:scale-105 disabled:scale-100">

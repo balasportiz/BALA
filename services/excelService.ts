@@ -7,6 +7,14 @@ export const parseExcelFile = (
     onProgress: (progress: number) => void
 ): Promise<ExcelData> => {
     return new Promise((resolve, reject) => {
+        // Basic file validation
+        if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+            return reject(new Error("Invalid file format. Please upload a .xlsx, .xls, or .csv file."));
+        }
+        if (file.size === 0) {
+            return reject(new Error("The uploaded file is empty."));
+        }
+
         const reader = new FileReader();
 
         reader.onprogress = (event: ProgressEvent<FileReader>) => {
@@ -24,6 +32,11 @@ export const parseExcelFile = (
                 const data = new Uint8Array(event.target.result as ArrayBuffer);
                 const workbook = XLSX.read(data, { type: 'array' });
                 const sheetNames = workbook.SheetNames;
+                
+                if (!sheetNames || sheetNames.length === 0) {
+                    throw new Error("The Excel file does not contain any sheets.");
+                }
+
                 const sheets: ExcelSheetData = {};
                 sheetNames.forEach(name => {
                     const worksheet = workbook.Sheets[name];
