@@ -22,7 +22,7 @@ const VLookupTool: React.FC = () => {
     const [dataSources, setDataSources] = useState<(ExcelData | null)[]>([null]);
 
     const [selectionA, setSelectionA] = useState<ColumnSelectionA>({ sheet: '', column: null });
-    const [dataSourceSelections, setDataSourceSelections] = useState<ColumnSelectionB[]>([{ sheet: '', lookupColumn: null, returnColumn: null }]);
+    const [dataSourceSelections, setDataSourceSelections] = useState<ColumnSelectionB[]>([{ sheet: '', lookupColumn: null, returnColumns: [] }]);
     
     const [mergedData, setMergedData] = useState<string[][] | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -47,7 +47,7 @@ const VLookupTool: React.FC = () => {
         setDataSourceSelections(current => {
             const newArr = [...current];
             newArr.length = newCount;
-            const initialSelection = { sheet: '', lookupColumn: null, returnColumn: null };
+            const initialSelection = { sheet: '', lookupColumn: null, returnColumns: [] };
             if (newCount > current.length) {
                 newArr.fill(initialSelection, current.length);
             }
@@ -89,7 +89,7 @@ const VLookupTool: React.FC = () => {
                 });
                 setDataSourceSelections(current => {
                     const newArr = [...current];
-                    newArr[index] = { sheet: '', lookupColumn: null, returnColumn: null };
+                    newArr[index] = { sheet: '', lookupColumn: null, returnColumns: [] };
                     return newArr;
                 });
             }
@@ -123,7 +123,7 @@ const VLookupTool: React.FC = () => {
             setError('Please upload all required data source files.');
             return;
         }
-        if (dataSourceSelections.some(sel => !sel.sheet || sel.lookupColumn === null || sel.returnColumn === null)) {
+        if (dataSourceSelections.some(sel => !sel.sheet || sel.lookupColumn === null || !sel.returnColumns || sel.returnColumns.length === 0)) {
             setError('Please configure all sheets and columns for your data source files.');
             return;
         }
@@ -170,22 +170,22 @@ const VLookupTool: React.FC = () => {
                 const dataA = sheetAData.slice(1);
                 const mapNormalizationMode = matchMode === 'exact' ? 'exact' : 'normalized';
                 const lookupMaps = dataSources.map((dataSource, index) => {
-                    if (!dataSource) return new Map<string, string>();
+                    if (!dataSource) return new Map<string, string[]>();
                     const selection = dataSourceSelections[index];
                     const sheetData = dataSource.sheets[selection.sheet!];
                     const fileId = `Data Source ${String.fromCharCode(66 + index)}`;
                     if (!sheetData || sheetData.length === 0) throw new Error(`Sheet "${selection.sheet}" in ${fileId} is empty.`);
                     if (selection.lookupColumn! >= (sheetData[0]?.length ?? 0)) throw new Error(`Invalid lookup column in ${fileId}.`);
-                    if (selection.returnColumn! >= (sheetData[0]?.length ?? 0)) throw new Error(`Invalid return column in ${fileId}.`);
+                    if (selection.returnColumns.some(col => col >= (sheetData[0]?.length ?? 0))) throw new Error(`Invalid return column in ${fileId}.`);
                     
-                    const lookupMap = new Map<string, string>();
+                    const lookupMap = new Map<string, string[]>();
                     for (const row of sheetData.slice(1)) {
                         const key = row[selection.lookupColumn!];
-                        const value = row[selection.returnColumn!];
+                        const values = selection.returnColumns.map(colIndex => row[colIndex]);
                         if (key) {
                            const finalKey = getComparisonKey(key, mapNormalizationMode);
                            if (!lookupMap.has(finalKey)) {
-                               lookupMap.set(finalKey, value);
+                               lookupMap.set(finalKey, values);
                            }
                         }
                     }
@@ -197,15 +197,18 @@ const VLookupTool: React.FC = () => {
                     if (!dataSource) return;
                     const selection = dataSourceSelections[index];
                     const sheetData = dataSource.sheets[selection.sheet!];
-                    const returnColumnHeader = sheetData[0][selection.returnColumn!];
-                    newHeaders.push(`Matched_${returnColumnHeader}`);
+                    selection.returnColumns.forEach(colIndex => {
+                        const returnColumnHeader = sheetData[0][colIndex];
+                        newHeaders.push(`Matched_${returnColumnHeader}`);
+                    });
                 });
 
                 const resultData = dataA.map(row => {
                     const lookupValue = row[selectionA.column!];
                     const newRow = [...row];
-                    lookupMaps.forEach(lookupMap => {
-                        let matchedValue = 'N/A';
+                    lookupMaps.forEach((lookupMap, index) => {
+                        const selection = dataSourceSelections[index];
+                        let matchedValues = Array(selection.returnColumns.length).fill('N/A');
                         if (lookupValue) {
                             if (matchMode === 'fuzzy') {
                                 const normalizedLookup = getComparisonKey(lookupValue, 'normalized');
@@ -220,14 +223,14 @@ const VLookupTool: React.FC = () => {
                                     if (minDistance === 0) break;
                                 }
                                 if (bestMatchKey !== null && minDistance <= matchTolerance) {
-                                    matchedValue = lookupMap.get(bestMatchKey) ?? 'N/A';
+                                    matchedValues = lookupMap.get(bestMatchKey) ?? Array(selection.returnColumns.length).fill('N/A');
                                 }
                             } else {
                                 const finalLookupValue = getComparisonKey(lookupValue, matchMode);
-                                matchedValue = lookupMap.get(finalLookupValue) ?? 'N/A';
+                                matchedValues = lookupMap.get(finalLookupValue) ?? Array(selection.returnColumns.length).fill('N/A');
                             }
                         }
-                        newRow.push(matchedValue);
+                        newRow.push(...matchedValues);
                     });
                     return newRow;
                 });
@@ -260,7 +263,7 @@ const VLookupTool: React.FC = () => {
     const isMergeDisabled = useMemo(() => {
         if (isLoading || !fileA || !selectionA.sheet || selectionA.column === null) return true;
         if (dataSources.some(ds => ds === null)) return true;
-        if (dataSourceSelections.some(sel => !sel.sheet || sel.lookupColumn === null || sel.returnColumn === null)) return true;
+        if (dataSourceSelections.some(sel => !sel.sheet || sel.lookupColumn === null || !sel.returnColumns || sel.returnColumns.length === 0)) return true;
         return false;
     }, [isLoading, fileA, dataSources, selectionA, dataSourceSelections]);
 

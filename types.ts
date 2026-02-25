@@ -17,7 +17,7 @@ export interface ColumnSelectionA {
 export interface ColumnSelectionB {
     sheet: string;
     lookupColumn: number | null;
-    returnColumn: number | null;
+    returnColumns: number[];
 }
 
 export type ColumnSelection = ColumnSelectionA | ColumnSelectionB;

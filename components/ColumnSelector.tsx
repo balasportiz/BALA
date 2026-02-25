@@ -23,9 +23,19 @@ const ColumnSelector: React.FC<ColumnSelectorProps> = ({ fileData, selection, se
         }
     };
 
-    const handleColumnChange = (field: 'column' | 'lookupColumn' | 'returnColumn', value: string) => {
+    const handleColumnChange = (field: 'column' | 'lookupColumn', value: string) => {
         const newSelection = { ...selection, [field]: value === '' ? null : parseInt(value) };
         setSelection(newSelection as ColumnSelectionA | ColumnSelectionB);
+    };
+
+    const handleReturnColumnToggle = (index: number) => {
+        const currentSelection = selection as ColumnSelectionB;
+        const currentReturnColumns = currentSelection.returnColumns || [];
+        const newReturnColumns = currentReturnColumns.includes(index)
+            ? currentReturnColumns.filter(i => i !== index)
+            : [...currentReturnColumns, index];
+        
+        setSelection({ ...currentSelection, returnColumns: newReturnColumns });
     };
 
     const selectionA = type === 'A' ? (selection as ColumnSelectionA) : null;
@@ -86,16 +96,27 @@ const ColumnSelector: React.FC<ColumnSelectorProps> = ({ fileData, selection, se
                         </select>
                     </div>
                     <div>
-                        <label htmlFor={`return-column-b-${uniqueId}`} className="block text-sm font-medium text-slate-600 mb-1">Return Column (value to add)</label>
-                        <select 
-                            id={`return-column-b-${uniqueId}`}
-                            value={selectionB.returnColumn ?? ''}
-                            onChange={(e) => handleColumnChange('returnColumn', e.target.value)}
-                            className="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                        >
-                            <option value="">-- Choose a column --</option>
-                            {headers.map((header, i) => <option key={`${header}-${i}`} value={i}>{header || `Column ${i + 1}`}</option>)}
-                        </select>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Return Columns (values to add)</label>
+                        <div className="w-full p-2 border border-slate-300 rounded-lg shadow-sm bg-white max-h-48 overflow-y-auto">
+                            {headers.length > 0 ? (
+                                <div className="space-y-1">
+                                    {headers.map((header, i) => (
+                                        <label key={`${header}-${i}`} className="flex items-center space-x-2 p-1 hover:bg-slate-50 rounded cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={(selectionB.returnColumns || []).includes(i)}
+                                                onChange={() => handleReturnColumnToggle(i)}
+                                                className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                                            />
+                                            <span className="text-sm text-slate-700">{header || `Column ${i + 1}`}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-400 italic">No columns available</p>
+                            )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-1">Select one or more columns to add to your result.</p>
                     </div>
                 </>
             )}
