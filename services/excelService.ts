@@ -1,7 +1,6 @@
 
 import type { ExcelData, ExcelSheetData } from '../types';
-
-declare const XLSX: any;
+import * as XLSX from 'xlsx';
 
 export const parseExcelFile = (
     file: File,
