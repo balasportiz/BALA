@@ -17,15 +17,20 @@ const ColumnSelector: React.FC<ColumnSelectorProps> = ({ fileData, selection, se
     const handleSheetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newSheet = e.target.value;
         if (type === 'A') {
-            setSelection({ sheet: newSheet, column: null });
+            setSelection({ sheet: newSheet, columns: [] });
         } else {
-            setSelection({ sheet: newSheet, lookupColumn: null, returnColumn: null });
+            setSelection({ sheet: newSheet, lookupColumns: [], returnColumns: [] });
         }
     };
 
-    const handleColumnChange = (field: 'column' | 'lookupColumn', value: string) => {
-        const newSelection = { ...selection, [field]: value === '' ? null : parseInt(value) };
-        setSelection(newSelection as ColumnSelectionA | ColumnSelectionB);
+    const handleColumnToggle = (field: 'columns' | 'lookupColumns', index: number) => {
+        const currentSelection = selection as any;
+        const currentCols = currentSelection[field] || [];
+        const newCols = currentCols.includes(index)
+            ? currentCols.filter((i: number) => i !== index)
+            : [...currentCols, index];
+        
+        setSelection({ ...currentSelection, [field]: newCols });
     };
 
     const handleReturnColumnToggle = (index: number) => {
@@ -66,34 +71,54 @@ const ColumnSelector: React.FC<ColumnSelectorProps> = ({ fileData, selection, se
             
             {selection.sheet && type === 'A' && selectionA && (
                 <div>
-                    <label htmlFor={`lookup-column-a-${uniqueId}`} className="block text-sm font-medium text-slate-600 mb-1">
-                        {customLabel || "Lookup Column"}
+                    <label className="block text-sm font-medium text-slate-600 mb-1">
+                        {customLabel || "Lookup Columns"}
                     </label>
-                    <select 
-                        id={`lookup-column-a-${uniqueId}`}
-                        value={selectionA.column ?? ''}
-                        onChange={(e) => handleColumnChange('column', e.target.value)}
-                        className="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                    >
-                        <option value="">-- Choose a column --</option>
-                        {headers.map((header, i) => <option key={`${header}-${i}`} value={i}>{header || `Column ${i + 1}`}</option>)}
-                    </select>
+                    <div className="w-full p-2 border border-slate-300 rounded-lg shadow-sm bg-white max-h-48 overflow-y-auto">
+                        {headers.length > 0 ? (
+                            <div className="space-y-1">
+                                {headers.map((header, i) => (
+                                    <label key={`${header}-${i}`} className="flex items-center space-x-2 p-1 hover:bg-slate-50 rounded cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={(selectionA.columns || []).includes(i)}
+                                            onChange={() => handleColumnToggle('columns', i)}
+                                            className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                                        />
+                                        <span className="text-sm text-slate-700">{header || `Column ${i + 1}`}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-sm text-slate-400 italic">No columns available</p>
+                        )}
+                    </div>
                 </div>
             )}
             
             {selection.sheet && type === 'B' && selectionB && (
                 <>
                     <div>
-                        <label htmlFor={`lookup-column-b-${uniqueId}`} className="block text-sm font-medium text-slate-600 mb-1">Lookup Column (to match)</label>
-                        <select 
-                            id={`lookup-column-b-${uniqueId}`}
-                            value={selectionB.lookupColumn ?? ''}
-                            onChange={(e) => handleColumnChange('lookupColumn', e.target.value)}
-                            className="w-full p-2 border border-slate-300 rounded-lg shadow-sm focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
-                        >
-                            <option value="">-- Choose a column --</option>
-                            {headers.map((header, i) => <option key={`${header}-${i}`} value={i}>{header || `Column ${i + 1}`}</option>)}
-                        </select>
+                        <label className="block text-sm font-medium text-slate-600 mb-1">Lookup Columns (to match)</label>
+                        <div className="w-full p-2 border border-slate-300 rounded-lg shadow-sm bg-white max-h-48 overflow-y-auto">
+                            {headers.length > 0 ? (
+                                <div className="space-y-1">
+                                    {headers.map((header, i) => (
+                                        <label key={`${header}-${i}`} className="flex items-center space-x-2 p-1 hover:bg-slate-50 rounded cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={(selectionB.lookupColumns || []).includes(i)}
+                                                onChange={() => handleColumnToggle('lookupColumns', i)}
+                                                className="rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                                            />
+                                            <span className="text-sm text-slate-700">{header || `Column ${i + 1}`}</span>
+                                        </label>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-slate-400 italic">No columns available</p>
+                            )}
+                        </div>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-600 mb-1">Return Columns (values to add)</label>

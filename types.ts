@@ -11,12 +11,12 @@ export interface ExcelData {
 
 export interface ColumnSelectionA {
     sheet: string;
-    column: number | null;
+    columns: number[];
 }
 
 export interface ColumnSelectionB {
     sheet: string;
-    lookupColumn: number | null;
+    lookupColumns: number[];
     returnColumns: number[];
 }
 

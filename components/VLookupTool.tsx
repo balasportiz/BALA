@@ -21,8 +21,8 @@ const VLookupTool: React.FC = () => {
     const [dataSourceCount, setDataSourceCount] = useState(1);
     const [dataSources, setDataSources] = useState<(ExcelData | null)[]>([null]);
 
-    const [selectionA, setSelectionA] = useState<ColumnSelectionA>({ sheet: '', column: null });
-    const [dataSourceSelections, setDataSourceSelections] = useState<ColumnSelectionB[]>([{ sheet: '', lookupColumn: null, returnColumns: [] }]);
+    const [selectionA, setSelectionA] = useState<ColumnSelectionA>({ sheet: '', columns: [] });
+    const [dataSourceSelections, setDataSourceSelections] = useState<ColumnSelectionB[]>([{ sheet: '', lookupColumns: [], returnColumns: [] }]);
     
     const [mergedData, setMergedData] = useState<string[][] | null>(null);
     const [stats, setStats] = useState<{ total: number; matched: number; unmatched: number } | null>(null);
@@ -48,7 +48,7 @@ const VLookupTool: React.FC = () => {
         setDataSourceSelections(current => {
             const newArr = [...current];
             newArr.length = newCount;
-            const initialSelection = { sheet: '', lookupColumn: null, returnColumns: [] };
+            const initialSelection = { sheet: '', lookupColumns: [], returnColumns: [] };
             if (newCount > current.length) {
                 newArr.fill(initialSelection, current.length);
             }
@@ -83,7 +83,7 @@ const VLookupTool: React.FC = () => {
             const data = await parseExcelFile(file, progressCallback);
             if (type === 'A') {
                 setFileA(data);
-                setSelectionA({ sheet: '', column: null });
+                setSelectionA({ sheet: '', columns: [] });
             } else {
                 setDataSources(current => {
                     const newArr = [...current];
@@ -92,7 +92,7 @@ const VLookupTool: React.FC = () => {
                 });
                 setDataSourceSelections(current => {
                     const newArr = [...current];
-                    newArr[index] = { sheet: '', lookupColumn: null, returnColumns: [] };
+                    newArr[index] = { sheet: '', lookupColumns: [], returnColumns: [] };
                     return newArr;
                 });
             }
@@ -119,7 +119,7 @@ const VLookupTool: React.FC = () => {
     };
 
     const handleMerge = useCallback(() => {
-        if (!fileA || !selectionA.sheet || selectionA.column === null) {
+        if (!fileA || !selectionA.sheet || !selectionA.columns || selectionA.columns.length === 0) {
             setError('Please select your main lookup file and configure its columns.');
             return;
         }
@@ -127,7 +127,7 @@ const VLookupTool: React.FC = () => {
             setError('Please upload all required data source files.');
             return;
         }
-        if (dataSourceSelections.some(sel => !sel.sheet || sel.lookupColumn === null || !sel.returnColumns || sel.returnColumns.length === 0)) {
+        if (dataSourceSelections.some(sel => !sel.sheet || !sel.lookupColumns || sel.lookupColumns.length === 0 || !sel.returnColumns || sel.returnColumns.length === 0)) {
             setError('Please configure all sheets and columns for your data source files.');
             return;
         }
@@ -169,7 +169,7 @@ const VLookupTool: React.FC = () => {
             try {
                 const sheetAData = fileA.sheets[selectionA.sheet!];
                 if (!sheetAData || sheetAData.length === 0) throw new Error(`Sheet "${selectionA.sheet}" in File A is empty.`);
-                if (selectionA.column! >= (sheetAData[0]?.length ?? 0)) throw new Error(`Invalid lookup column for File A.`);
+                if (selectionA.columns.some(col => col >= (sheetAData[0]?.length ?? 0))) throw new Error(`Invalid lookup column for File A.`);
                 const headerA = sheetAData[0];
                 const dataA = sheetAData.slice(1);
                 const mapNormalizationMode = matchMode === 'exact' ? 'exact' : 'normalized';
@@ -179,14 +179,15 @@ const VLookupTool: React.FC = () => {
                     const sheetData = dataSource.sheets[selection.sheet!];
                     const fileId = `Data Source ${String.fromCharCode(66 + index)}`;
                     if (!sheetData || sheetData.length === 0) throw new Error(`Sheet "${selection.sheet}" in ${fileId} is empty.`);
-                    if (selection.lookupColumn! >= (sheetData[0]?.length ?? 0)) throw new Error(`Invalid lookup column in ${fileId}.`);
+                    if (selection.lookupColumns.some(col => col >= (sheetData[0]?.length ?? 0))) throw new Error(`Invalid lookup column in ${fileId}.`);
                     if (selection.returnColumns.some(col => col >= (sheetData[0]?.length ?? 0))) throw new Error(`Invalid return column in ${fileId}.`);
                     
                     const lookupMap = new Map<string, string[]>();
                     for (const row of sheetData.slice(1)) {
-                        const key = row[selection.lookupColumn!];
+                        const keyValues = selection.lookupColumns.map(col => row[col] || '');
+                        const key = keyValues.join('|');
                         const values = selection.returnColumns.map(colIndex => row[colIndex]);
-                        if (key) {
+                        if (keyValues.some(v => v)) {
                            const finalKey = getComparisonKey(key, mapNormalizationMode);
                            if (!lookupMap.has(finalKey)) {
                                lookupMap.set(finalKey, values);
@@ -211,14 +212,15 @@ const VLookupTool: React.FC = () => {
                 let unmatchedCount = 0;
 
                 const resultData = dataA.map(row => {
-                    const lookupValue = row[selectionA.column!];
+                    const lookupKeyValues = selectionA.columns.map(col => row[col] || '');
+                    const lookupValue = lookupKeyValues.join('|');
                     const newRow = [...row];
                     let hasAnyMatch = false;
 
                     lookupMaps.forEach((lookupMap, index) => {
                         const selection = dataSourceSelections[index];
                         let matchedValues = Array(selection.returnColumns.length).fill('N/A');
-                        if (lookupValue) {
+                        if (lookupKeyValues.some(v => v)) {
                             if (matchMode === 'fuzzy') {
                                 const normalizedLookup = getComparisonKey(lookupValue, 'normalized');
                                 let minDistance = Infinity;
@@ -291,9 +293,9 @@ const VLookupTool: React.FC = () => {
     if (mergedData) currentStep = 3;
 
     const isMergeDisabled = useMemo(() => {
-        if (isLoading || !fileA || !selectionA.sheet || selectionA.column === null) return true;
+        if (isLoading || !fileA || !selectionA.sheet || !selectionA.columns || selectionA.columns.length === 0) return true;
         if (dataSources.some(ds => ds === null)) return true;
-        if (dataSourceSelections.some(sel => !sel.sheet || sel.lookupColumn === null || !sel.returnColumns || sel.returnColumns.length === 0)) return true;
+        if (dataSourceSelections.some(sel => !sel.sheet || !sel.lookupColumns || sel.lookupColumns.length === 0 || !sel.returnColumns || sel.returnColumns.length === 0)) return true;
         return false;
     }, [isLoading, fileA, dataSources, selectionA, dataSourceSelections]);
 

@@ -4,9 +4,10 @@ import React from 'react';
 interface ResultsTableProps {
     data: string[][];
     highlightIndices?: Set<number>;
+    highlightCells?: Set<string>;
 }
 
-const ResultsTable: React.FC<ResultsTableProps> = ({ data, highlightIndices }) => {
+const ResultsTable: React.FC<ResultsTableProps> = ({ data, highlightIndices, highlightCells }) => {
     if (!data || data.length === 0) {
         return <p className="text-center text-slate-500">No data to display.</p>;
     }
@@ -23,7 +24,8 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ data, highlightIndices }) =
                lower.includes('cleaned_') ||
                lower.includes('is_duplicate') ||
                lower.includes('original_row') ||
-               lower.includes('group_id');
+               lower.includes('group_id') ||
+               lower.includes('match_status');
     };
 
     return (
@@ -56,12 +58,14 @@ const ResultsTable: React.FC<ResultsTableProps> = ({ data, highlightIndices }) =
                                 <tr key={rowIndex} className={`transition-colors duration-150 group ${isHighlighted ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-sky-50/50'}`}>
                                     {row.map((cell, cellIndex) => {
                                         const magic = isMagicColumn(header[cellIndex]);
+                                        const isCellHighlighted = highlightCells?.has(`${rowIndex}-${cellIndex}`);
                                         return (
                                             <td 
                                                 key={cellIndex} 
                                                 className={`px-6 py-4 whitespace-nowrap border-t border-slate-200/60 ${
+                                                    isCellHighlighted ? 'bg-red-100 text-red-900 font-bold border-x border-red-300' :
                                                     magic ? 'bg-indigo-50/30 font-semibold text-indigo-900 group-hover:bg-indigo-100/50' : ''
-                                                } ${isHighlighted ? 'text-red-900' : ''}`}
+                                                } ${isHighlighted && !isCellHighlighted ? 'text-red-900' : ''}`}
                                             >
                                                 {cell}
                                             </td>
