@@ -115,7 +115,7 @@ const SheetMatchingTool: React.FC = () => {
                     const row = dataB[i];
                     const key = row[keyColB];
                     if (key) {
-                        mapB.set(key, row); // Exact case-sensitive match
+                        mapB.set(key.toString().trim().toLowerCase(), row); // Case-insensitive match
                     }
                 }
 
@@ -133,7 +133,7 @@ const SheetMatchingTool: React.FC = () => {
                     
                     if (!keyA) continue; // Skip empty keys
 
-                    const rowB = mapB.get(keyA);
+                    const rowB = mapB.get(keyA.toString().trim().toLowerCase());
                     const newRow = [keyA];
                     let hasDiff = false;
 
@@ -155,7 +155,10 @@ const SheetMatchingTool: React.FC = () => {
                             const valA = rowA[idxA] ?? '';
                             const valB = rowB[idxB] ?? '';
 
-                            if (valA !== valB) { // Exact Case-Sensitive
+                            const strA = valA.toString().trim().toLowerCase();
+                            const strB = valB.toString().trim().toLowerCase();
+
+                            if (strA !== strB) { // Case-insensitive comparison
                                 hasDiff = true;
                                 newRow.push(`${valA} (B: ${valB})`);
                                 highlightCells.add(`${i - 1}-${j + 1}`); // +1 because key is at 0
