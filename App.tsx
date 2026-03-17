@@ -4,10 +4,11 @@ import VLookupTool from './components/VLookupTool';
 import DuplicateFinderTool from './components/DuplicateFinderTool';
 import DateWizardTool from './components/DateWizardTool';
 import SheetMatchingTool from './components/SheetMatchingTool';
-import { MagicWandIcon, DocumentDuplicateIcon, CalendarIcon, ArrowsRightLeftIcon } from './components/Icons';
+import SequenceFinderTool from './components/SequenceFinderTool';
+import { MagicWandIcon, DocumentDuplicateIcon, CalendarIcon, ArrowsRightLeftIcon, BarsArrowDownIcon } from './components/Icons';
 
 const App: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'vlookup' | 'dedup' | 'date' | 'sheetmatch'>('vlookup');
+    const [activeTab, setActiveTab] = useState<'vlookup' | 'dedup' | 'date' | 'sheetmatch' | 'sequence'>('vlookup');
 
     return (
         <div className="min-h-screen w-full bg-gradient-to-br from-white via-sky-50 to-cyan-100 text-slate-800 p-4 sm:p-6 lg:p-10">
@@ -57,6 +58,17 @@ const App: React.FC = () => {
                             Sheet Matching
                         </button>
                         <button
+                            onClick={() => setActiveTab('sequence')}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
+                                activeTab === 'sequence' 
+                                ? 'bg-white text-violet-600 shadow-md transform scale-105' 
+                                : 'text-slate-500 hover:text-slate-700 hover:bg-white/50'
+                            }`}
+                        >
+                            <BarsArrowDownIcon className="w-5 h-5" />
+                            Sequence Finder
+                        </button>
+                        <button
                             onClick={() => setActiveTab('date')}
                             className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
                                 activeTab === 'date' 
@@ -84,6 +96,11 @@ const App: React.FC = () => {
                     {activeTab === 'sheetmatch' && (
                         <div className="animate-fadeIn">
                             <SheetMatchingTool />
+                        </div>
+                    )}
+                    {activeTab === 'sequence' && (
+                        <div className="animate-fadeIn">
+                            <SequenceFinderTool />
                         </div>
                     )}
                     {activeTab === 'date' && (
