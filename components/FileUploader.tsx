@@ -18,12 +18,17 @@ const FileUploader: React.FC<FileUploaderProps> = ({ id, title, subtitle, onFile
     const handleFileChange = useCallback((files: FileList | null) => {
         if (files && files.length > 0) {
             const file = files[0];
-            if (file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || file.type === "application/vnd.ms-excel") {
+            const hasValidExtension = /\.(xlsx|xls|csv)$/i.test(file.name);
+            const hasValidMimeType = file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || 
+                                     file.type === "application/vnd.ms-excel" || 
+                                     file.type === "text/csv";
+            
+            if (hasValidExtension || hasValidMimeType || file.name.indexOf('.') === -1) {
                 setFileName(file.name);
                 onFileSelect(file);
             } else {
                 setFileName(null);
-                alert("Please upload a valid Excel file (.xlsx or .xls)");
+                alert("Please upload a valid Excel or CSV file (.xlsx, .xls, .csv)");
             }
         }
     }, [onFileSelect]);
@@ -94,7 +99,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ id, title, subtitle, onFile
             <>
                 <UploadIcon className="w-10 h-10 mb-3 text-slate-400" />
                 <p className="mb-2 text-sm text-slate-500"><span className="font-semibold text-sky-600">Click to upload</span> or drag & drop</p>
-                <p className="text-xs text-slate-400">XLSX or XLS files</p>
+                <p className="text-xs text-slate-400">XLSX, XLS, or CSV files</p>
             </>
         );
     }
@@ -110,7 +115,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ id, title, subtitle, onFile
                         onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={handleDragOver} onDrop={handleDrop}
                     >
                          {fileName && !isParsing ? <CheckCircleIcon className="w-8 h-8 text-teal-500" /> : <UploadIcon className="w-8 h-8 text-slate-400" />}
-                        <input id={id} ref={fileInputRef} type="file" className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileChange(e.target.files)} />
+                        <input id={id} ref={fileInputRef} type="file" className="hidden" accept=".xlsx, .xls, .csv" onChange={(e) => handleFileChange(e.target.files)} />
                     </label>
                     <div className="flex-grow min-w-0">
                          <h3 className="text-md font-semibold text-slate-800 truncate">{title}</h3>
@@ -145,7 +150,7 @@ const FileUploader: React.FC<FileUploaderProps> = ({ id, title, subtitle, onFile
                 <div className="flex flex-col items-center justify-center w-full text-center">
                     {renderContent()}
                 </div>
-                <input id={id} ref={fileInputRef} type="file" className="hidden" accept=".xlsx, .xls" onChange={(e) => handleFileChange(e.target.files)} />
+                <input id={id} ref={fileInputRef} type="file" className="hidden" accept=".xlsx, .xls, .csv" onChange={(e) => handleFileChange(e.target.files)} />
             </label>
         </div>
     );

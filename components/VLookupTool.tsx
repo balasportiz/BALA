@@ -97,8 +97,8 @@ const VLookupTool: React.FC = () => {
                 });
             }
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Failed to parse the Excel file. Please ensure it is a valid .xlsx or .xls file.';
-            setError(errorMessage);
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            setError(`Error parsing file: ${errorMessage}`);
             console.error(err);
         } finally {
             setIsLoading(false);

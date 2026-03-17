@@ -36,7 +36,8 @@ const DateWizardTool: React.FC = () => {
             setSelectedSheet('');
             setSelectedColumn(null);
         } catch (err) {
-            setError('Failed to parse the Excel file. Please ensure it is a valid .xlsx or .xls file.');
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            setError(`Error parsing file: ${errorMessage}`);
             console.error(err);
         } finally {
             setIsLoading(false);

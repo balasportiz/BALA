@@ -38,8 +38,8 @@ const SequenceFinderTool: React.FC = () => {
             setSheet('');
             setColumn(null);
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'Failed to parse the Excel file.';
-            setError(errorMessage);
+            const errorMessage = err instanceof Error ? err.message : String(err);
+            setError(`Error parsing file: ${errorMessage}`);
             console.error(err);
         } finally {
             setIsLoading(false);

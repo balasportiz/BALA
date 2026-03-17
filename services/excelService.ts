@@ -8,8 +8,13 @@ export const parseExcelFile = (
 ): Promise<ExcelData> => {
     return new Promise((resolve, reject) => {
         // Basic file validation
-        if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
-            return reject(new Error("Invalid file format. Please upload a .xlsx, .xls, or .csv file."));
+        const hasValidExtension = /\.(xlsx|xls|csv)$/i.test(file.name);
+        const hasValidMimeType = file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || 
+                                 file.type === "application/vnd.ms-excel" || 
+                                 file.type === "text/csv";
+        
+        if (!hasValidExtension && !hasValidMimeType && file.name.indexOf('.') !== -1) {
+            return reject(new Error(`Invalid file format (${file.name}). Please upload a .xlsx, .xls, or .csv file.`));
         }
         if (file.size === 0) {
             return reject(new Error("The uploaded file is empty."));
