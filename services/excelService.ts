@@ -19,7 +19,8 @@ export const parseExcelFile = (
 
         reader.onprogress = (event: ProgressEvent<FileReader>) => {
             if (event.lengthComputable) {
-                const progress = Math.round((event.loaded / event.total) * 100);
+                // Cap at 99% during file read. 100% will be set right before parsing.
+                const progress = Math.min(99, Math.round((event.loaded / event.total) * 100));
                 onProgress(progress);
             }
         };
@@ -28,33 +29,39 @@ export const parseExcelFile = (
             if (!event.target?.result) {
                 return reject(new Error("FileReader event target result is null."));
             }
-            try {
-                const data = new Uint8Array(event.target.result as ArrayBuffer);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheetNames = workbook.SheetNames;
-                
-                if (!sheetNames || sheetNames.length === 0) {
-                    throw new Error("The Excel file does not contain any sheets.");
-                }
+            
+            // Set to 100% to indicate file is loaded into memory, now we parse
+            onProgress(100);
 
-                const sheets: ExcelSheetData = {};
-                sheetNames.forEach(name => {
-                    const worksheet = workbook.Sheets[name];
-                    // Using header: 1 to get an array of arrays, which is easier to work with indices
-                    const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-                    // Convert all cell data to trimmed strings to ensure robust matching.
-                    // Case sensitivity will be handled in the merge logic.
-                    sheets[name] = (json as any[][]).map(row => 
-                        row.map(cell => String(cell ?? '').trim())
-                    );
-                });
-                
-                // Ensure progress completes and call resolves
-                onProgress(100);
-                resolve({ fileName: file.name, sheetNames, sheets });
-            } catch (error) {
-                reject(error);
-            }
+            // Yield to the browser so it can render the 100% progress bar 
+            // before the main thread is blocked by the heavy XLSX.read operation.
+            setTimeout(() => {
+                try {
+                    const data = new Uint8Array(event.target!.result as ArrayBuffer);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetNames = workbook.SheetNames;
+                    
+                    if (!sheetNames || sheetNames.length === 0) {
+                        throw new Error("The Excel file does not contain any sheets.");
+                    }
+
+                    const sheets: ExcelSheetData = {};
+                    sheetNames.forEach(name => {
+                        const worksheet = workbook.Sheets[name];
+                        // Using header: 1 to get an array of arrays, which is easier to work with indices
+                        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                        // Convert all cell data to trimmed strings to ensure robust matching.
+                        // Case sensitivity will be handled in the merge logic.
+                        sheets[name] = (json as any[][]).map(row => 
+                            row.map(cell => String(cell ?? '').trim())
+                        );
+                    });
+                    
+                    resolve({ fileName: file.name, sheetNames, sheets });
+                } catch (error) {
+                    reject(error);
+                }
+            }, 50);
         };
         reader.onerror = reject;
         reader.readAsArrayBuffer(file);
