@@ -24,7 +24,7 @@ const SequenceFinderTool: React.FC = () => {
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadProgress, setUploadProgress] = useState<number | undefined>(undefined);
 
     const handleFile = useCallback(async (selectedFile: File) => {
         setIsLoading(true);
@@ -43,7 +43,7 @@ const SequenceFinderTool: React.FC = () => {
             console.error(err);
         } finally {
             setIsLoading(false);
-            setUploadProgress(0);
+            setUploadProgress(undefined);
         }
     }, []);
 
@@ -214,7 +214,7 @@ const SequenceFinderTool: React.FC = () => {
                 </div>
             </AnimatedSection>
 
-            {isLoading && !results && uploadProgress === 0 && (
+            {isLoading && !results && uploadProgress === undefined && (
                 <div className="flex justify-center items-center p-10">
                     <div className="animate-spin rounded-full h-20 w-20 border-t-4 border-b-4 border-sky-500"></div>
                     <p className="ml-4 text-slate-600 font-semibold">Finding Sequences...</p>
